@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# License: GNU Affero General Public License Version 3 (GNU AGPLv3), (c) 2023, Marc Gilligan <marcg@ulfnic.com>
+
+
+print_stderr() {
+	if [[ $1 == '0' ]]; then
+		[[ $2 ]] && printf "$2" "${@:3}" 1>&2
+	else
+		[[ $2 ]] && printf '%s'"$2" "ERROR: ${0##*/}, " "${@:3}" 1>&2
+		exit "$1"
+	fi
+}
+
+
+
+delay_sec=
+instance_name=
+force_last=
+dry_run=
+while [[ "$1" ]]; do
+	case $1 in
+		--delay|-d)
+			shift; delay_sec=$1 ;;
+
+		--instance-name|-n)
+			shift; instance_name=$1 ;;
+
+		--force-last|-f)
+			force_last=1 ;;
+
+		--dry-run)
+			dry_run=1 ;;
+
+		-*)
+			print_stderr 1 '%s\n' 'unrecognized option: '"$1" ;;
+
+		*)
+			# First non-option is the string that divides the exec groups
+			exec_divider=$1
+			shift
+			break
+	esac
+	shift
+done
+
+
+
+# Checksum a string
+bashash_main() {
+	local \
+		str=$1 \
+		checksum_len=${2:-16} \
+		checksum_arr=(1)
+	local str_len=${#str}
+	bashash__out=
+
+	for (( i = 0; i < str_len; i++ )); do
+		printf -v val '%d' "'${str:i:1}"
+		checksum_arr[0]=$(( ( checksum_arr[0] + val ) % 256 ))
+		for (( i2 = 1; i2 < checksum_len; i2++ )); do
+			checksum_arr[i2]=$(( ( checksum_arr[i2] + checksum_arr[i2-1] ) % 256 ))
+		done
+	done
+
+	printf -v bashash__out '%02x' "${checksum_arr[@]}"
+}
+
+
+
+# Eval the parameters within the exec group specified by exec_pointer
+exec_pointer() {
+	if [[ ${exec_pos_start[$exec_pointer]} ]]; then
+		if [[ $dry_run ]]; then
+			printf '%q ' "${@:${exec_pos_start[$exec_pointer]}:${exec_pos_end[$exec_pointer]}}"
+			printf '\n'
+		else
+			eval "${@:${exec_pos_start[$exec_pointer]}:${exec_pos_end[$exec_pointer]}}" & disown
+		fi
+	fi
+}
+
+
+
+# Validate and define variables
+[[ $exec_divider ]] || print_stderr 1 'no command divider provided'
+[[ $1 ]] || print_stderr 1 'no command(s) provided'
+: ${delay_sec:='0.3'}
+
+temp_dir=${TMPDIR:-${TEMPDIR:-${TMP:-${TEMP:-${XDG_RUNTIME_DIR:-/tmp}}}}}
+[[ -d $temp_dir ]] || print_stderr 1 'no temp directory found'
+
+
+
+# Derive the fifo path from a checksum of the instance name or the exec portion of the parameters
+[[ $instance_name ]] && bashash_main "$instance_name" || bashash_main "$*"
+fifo_path=$temp_dir'/'${0##*/}'__'$USER'_'$bashash__out
+
+
+
+# If the named piped already exists, write a newline to it and exit
+if [[ -p $fifo_path ]]; then
+	printf '\n' > "$fifo_path"
+	exit
+fi
+
+
+
+# Create a non-blocking named piped that's deleted on EXIT
+[[ -e $fifo_path ]] && rm "$fifo_path"
+mkfifo --mode 0600 "$fifo_path"
+exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
+
+on_exit() {
+	[[ -e $fifo_path ]] && rm -f "$fifo_path"
+}
+trap 'on_exit' 'EXIT'
+
+
+
+# Increment through the parameters defining the number of
+# exec dividers and where exec groups begin and end
+exec_pos_start=()
+exec_pos_end=()
+exec_count=1
+param_pos=0
+for param in "$@"; do
+
+	if [[ $param == $exec_divider ]]; then
+		exec_pos_end[$exec_count]=$param_pos
+		(( param_pos++ ))
+		(( exec_count++ ))
+		continue
+	fi
+
+	(( param_pos++ ))
+	[[ ${exec_pos_start[$exec_count]} ]] || exec_pos_start[$exec_count]=$param_pos
+
+done
+[[ ${exec_pos_end[$exec_count]} ]] || exec_pos_end[$exec_count]=$param_pos
+
+
+
+
+# If the last exec group is forced and there's only one, exec now
+[[ $force_last ]] && [[ $exec_count == '1' ]] && exec_pointer "$@"
+
+
+
+# Listen on the named pipe for the specified delay time and
+# increment the exec group pointer when a newline is read.
+# If the pointer exceeds the number exec groups then exit.
+exec_pointer=1
+while read -t "$delay_sec" -u 4; do
+	(( exec_pointer++ ))
+	[[ $force_last ]] && (( exec_pointer == exec_count )) && break
+done
+(( exec_pointer <= exec_count )) && exec_pointer "$@"
+
+
+
