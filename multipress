@@ -44,14 +44,27 @@ cmd_segs+=("$@")
 
 
 
-# Checksum a string
+# Validate arguements
+[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
+[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
+
+
+
+# Define temp directory for fifo file
+temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
+[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
+
+
+
+# Define function for generating fast checksums
 bashash_main() {
+	bashash__out=
 	local \
 		str=$1 \
 		checksum_len=${2:-16} \
 		checksum_arr=(1)
 	local str_len=${#str}
-	bashash__out=
+
 
 	for (( i = 0; i < str_len; i++ )); do
 		printf -v val '%d' "'${str:i:1}"
@@ -60,6 +73,7 @@ bashash_main() {
 			checksum_arr[i2]=$(( ( checksum_arr[i2] + checksum_arr[i2-1] ) % 256 ))
 		done
 	done
+
 
 	printf -v bashash__out '%02x' "${checksum_arr[@]}"
 }
@@ -76,12 +90,13 @@ temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 
 
 # Derive the fifo path from a checksum of the instance name or the exec portion of the parameters
-[[ $name ]] && bashash_main "$name" || bashash_main "${command_segs[*]}"
+[[ $name ]] && bashash_main "$name" || bashash_main "${cmd_segs[*]}"
 fifo_path="${temp_dir}/${0##*/}__${USER}_${bashash__out}"
 
 
 
-# If the named piped already exists, write a newline to it and exit
+
+# If an instance is already running, perform an activation and exit
 if [[ -p $fifo_path ]]; then
 	printf '\n' > "$fifo_path"
 	exit
@@ -89,15 +104,16 @@ fi
 
 
 
-# Create a non-blocking named piped that's deleted on EXIT
+# Create a non-blocking fifo that's removed on EXIT
 [[ -e $fifo_path ]] && rm -- "$fifo_path"
-mkfifo --mode 0600 -- "$fifo_path"
-exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
 
 on_exit() {
 	[[ -e $fifo_path ]] && rm -- "$fifo_path"
 }
 trap 'on_exit' 'EXIT'
+
+mkfifo --mode 0600 -- "$fifo_path"
+exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
 
 
 
