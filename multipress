@@ -124,7 +124,7 @@ exec_count=1
 param_pos=0
 for param in "$@"; do
 
-	if [[ $param == $exec_divider ]]; then
+	if [[ $param == "$exec_divider" ]]; then
 		exec_pos_end[$exec_count]=$param_pos
 		(( param_pos++ ))
 		(( exec_count++ ))
