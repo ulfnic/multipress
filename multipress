@@ -18,7 +18,7 @@ delim='__'
 activation_timeout='0.3'
 prevent_overrun=
 dry_run=
-command_segs=()
+cmd_segs=()
 while [[ "$1" ]]; do
 	case $1 in
 		'--name'|'-n')
@@ -36,11 +36,11 @@ while [[ "$1" ]]; do
 		'-'*)
 			print_stderr 1 '%s\n' 'unrecognized option: '"$1" ;;
 		*)
-			command_segs+=("$1")
+			cmd_segs+=("$1")
 	esac
 	shift
 done
-command_segs+=("$@")
+cmd_segs+=("$@")
 
 
 
@@ -66,23 +66,9 @@ bashash_main() {
 
 
 
-# Eval the parameters within the exec group specified by exec_pointer
-exec_pointer() {
-	if [[ ${exec_pos_start[$exec_pointer]} ]]; then
-		if [[ $dry_run ]]; then
-			printf '%q ' "${@:${exec_pos_start[$exec_pointer]}:${exec_pos_end[$exec_pointer]}}"
-			printf '\n'
-		else
-			eval "${@:${exec_pos_start[$exec_pointer]}:${exec_pos_end[$exec_pointer]}}" & disown
-		fi
-	fi
-}
-
-
-
 # Validate and define variables
 [[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
-[[ ${#command_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
+[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
 
 temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 [[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
@@ -115,44 +101,54 @@ trap 'on_exit' 'EXIT'
 
 
 
-# Increment through the parameters defining the number of
-# exec delimiters and where exec groups begin and end
-exec_pos_start=()
-exec_pos_end=()
-exec_count=1
-param_pos=0
-for param in "${command_segs[@]}"; do
-
+# Define index and number of parameters of each command
+cmd_num_to_pos=()
+cmd_num_to_params=()
+cmds_last_index=0
+i=0
+for param in "${cmd_segs[@]}"; do
 	if [[ $param == "$delim" ]]; then
-		exec_pos_end[$exec_count]=$param_pos
-		(( param_pos++ ))
-		(( exec_count++ ))
+		(( cmds_last_index++ )) || :
+		(( i++ )) || :
 		continue
 	fi
 
-	(( param_pos++ ))
-	[[ ${exec_pos_start[$exec_count]} ]] || exec_pos_start[$exec_count]=$param_pos
-
+	if [[ ${cmd_num_to_pos[$cmds_last_index]} ]]; then
+		(( cmd_num_to_params[cmds_last_index]++ ))
+	else
+		# New command
+		cmd_num_to_pos[cmds_last_index]=$i
+		cmd_num_to_params[cmds_last_index]=1
+	fi
+	(( i++ )) || :
 done
-[[ ${exec_pos_end[$exec_count]} ]] || exec_pos_end[$exec_count]=$param_pos
 
 
 
+# Define command to run according to script activations within the rolling delay
+# Skip reading for script activations if there's only one command and overun is prevented
+cmd_num=0
+if (( cmds_last_index > 0 )) || [[ ! $prevent_overrun ]]; then
+	while read -t "$activation_timeout" -u 4; do
+		(( cmd_num++ )) || :
+		[[ $prevent_overrun ]] && (( cmd_num == cmds_last_index )) && break
+	done
+	(( cmd_num <= cmds_last_index )) || exit 0
+fi
+[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
+cmd_to_run=(${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}})
 
-# If the last exec group is forced and there's only one, exec now
-[[ $prevent_overrun ]] && [[ $exec_count == '1' ]] && exec_pointer "${command_segs[@]}"
+
+
+if [[ $dry_run ]]; then
+	eval() {
+		printf '%q ' 'eval' "$@"; printf '\n'
+	} 1>&2
+fi
 
 
 
-# Listen on the named pipe for the specified delay time and
-# increment the exec group pointer when a newline is read.
-# If the pointer exceeds the number exec groups then exit.
-exec_pointer=1
-while read -t "$activation_timeout" -u 4; do
-	(( exec_pointer++ ))
-	[[ $prevent_overrun ]] && (( exec_pointer == exec_count )) && break
-done
-(( exec_pointer <= exec_count )) && exec_pointer "${command_segs[@]}"
+eval -- "${cmd_to_run[@]}" & disown
 
 
 
