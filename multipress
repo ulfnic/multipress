@@ -3,6 +3,59 @@
 set -o errexit
 
 
+help_doc() {
+	{ read -r -d '' || :; [[ $REPLY == '|'* ]] && REPLY=${REPLY:1}; printf '%s' "${REPLY//$'\n|'/$'\n'}"; } <<-'HelpDoc'
+		|multipress [ARGUEMENT...] [--] [COMMAND|DELIM...]
+		|
+		|Run one of several COMMANDs based on frequency of execution within a rolling timeout.
+		|
+		|Useful for a variety of purposes such as extending keyboard shortcut support to include
+		|multi-tap combos.
+
+		|DEPENDENCIES
+		|	mkfifo
+
+		|ARGUEMENT
+		|	-n|--name NAME         Custom name to use for the NAME of the instance
+		|	-d|--delim DELIM       Custom delimiter to seperate COMMANDs, default: '__'
+		|	-t|--timeout SECONDS   Custom timeout for waiting for next ACTIVATION, default: 0.3
+		|	-p|--prevent-overrun   Run the last COMMAND if reached by ACTIVATIONs
+		|	--dry-run              Do everything except running the COMMAND, print it instead
+		|	-h|--help              Print help doc
+		|	--                     End option processing
+		|	COMMAND || DELIM
+
+		|ENVIRONMENT
+		|	TMPDIR || XDG_RUNTIME_DIR   Directory to use for fifo file, fallback: /tmp
+		|	DEBUG                       Use set -x to print debugging information
+
+		|NAME
+		|	Part of the filename used for the IPC fifo file. All parameters containing COMMAND
+		|	and DELIM are hashed to produce the NAME. If a custom name is given, NAME becomes
+		|	a hash of that name instead.
+
+		|COMMAND || DELIM
+		|	A series of single command(s) divided by DELIM that will undergo shell interpretation
+		|	and be executed according to their order based on the number of ACTIVATIONs.
+		|	For example, two timely ACTIVATIONs of the script will run the second COMMAND.
+
+		|ACTIVATION
+		|	Each execution of the script constitutions an ACTIVATION under a given NAME.
+		|
+		|	If no script is listening under a NAME, the script listens for ACTIVATIONs until
+		|	the timeout is reached from last ACTIVATION.
+		|
+		|	If a script is already listening under NAME, the script writes an ACTIVATION to
+		|	that instance over IPC (see: NAME).
+
+		|EXAMPLES
+		|	multipress -- notify-send 'activated once' __ notify-send 'activated twice'
+	HelpDoc
+	[[ $1 ]] && exit "$1"
+}
+
+
+
 print_stderr() {
 	if [[ $1 == '0' ]]; then
 		[[ $2 ]] && printf "$2" "${@:3}" 1>&2 || :
@@ -32,6 +85,8 @@ while [[ "$1" ]]; do
 			prevent_overrun=1 ;;
 		'--dry-run')
 			dry_run=1 ;;
+		'--help'|'-h')
+			help_doc 0 ;;
 		'--')
 			shift; break ;;
 		'-'*)
