@@ -81,11 +81,10 @@ exec_pointer() {
 
 
 # Validate and define variables
-[[ $delim ]] || print_stderr 1 'no command delimiter provided'
-[[ ${#command_segs[@]} != '0' ]] || print_stderr 1 'no command(s) provided'
+[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
+[[ ${#command_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
 
-
-temp_dir=${TMPDIR:-${TEMPDIR:-${TMP:-${TEMP:-${XDG_RUNTIME_DIR:-/tmp}}}}}
+temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 [[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
 
 
