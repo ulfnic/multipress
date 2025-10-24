@@ -16,13 +16,14 @@ help_doc() {
 		|	mkfifo
 
 		|ARGUEMENT
-		|	-n|--name NAME         Custom name to use for the NAME of the instance
-		|	-d|--delim DELIM       Custom delimiter to seperate COMMANDs, default: '__'
-		|	-t|--timeout SECONDS   Custom timeout for waiting for next ACTIVATION, default: 0.3
-		|	-p|--prevent-overrun   Run the last COMMAND if reached by ACTIVATIONs
-		|	--dry-run              Do everything except running the COMMAND, print it instead
-		|	-h|--help              Print help doc
-		|	--                     End option processing
+		|	-n|--name NAME             Custom name to use for the NAME of the instance
+		|	-d|--delim DELIM           Custom delimiter to seperate COMMANDs, default: '__'
+		|	-t|--timeout SECONDS       Custom timeout for waiting for next ACTIVATION, default: 0.3
+		|	-p|--prevent-overrun       Run the last COMMAND if reached by ACTIVATIONs
+		|	-c|--command-string-mode   See: Command String mode
+		|	--dry-run                  Do everything except running the COMMAND, print it instead
+		|	-h|--help                  Print help doc
+		|	--                         End option processing
 		|	COMMAND || DELIM
 
 		|ENVIRONMENT
@@ -31,14 +32,20 @@ help_doc() {
 
 		|NAME
 		|	Part of the filename used for the IPC fifo file. All parameters containing COMMAND
-		|	and DELIM are hashed to produce the NAME. If a custom name is given, NAME becomes
-		|	a hash of that name instead.
+		|	and DELIM are hashed to produce the NAME. If a custom name is given that value is
+		|	hashed instead. In both cases Command String mode state is included in the hash.
 
 		|COMMAND || DELIM
-		|	A series of single command(s) divided by DELIM that will undergo shell interpretation
-		|	and be executed according to their order based on the number of ACTIVATIONs.
+		|	A COMMAND is executed according to its order based on the number of ACTIVATIONs.
 		|	For example, two timely ACTIVATIONs of the script will run the second COMMAND.
-
+		|
+		|	Normal mode:
+		|		A series of command(s) with parameters divided by DELIM that undergo shell
+		|		interpretation and are evaluated with eval.
+		|
+		|	Command String mode:
+		|		Does not recognize DELIM. A series of command string(s) evaluated with bash -c
+		
 		|ACTIVATION
 		|	Each execution of the script constitutions an ACTIVATION under a given NAME.
 		|
@@ -49,7 +56,13 @@ help_doc() {
 		|	that instance over IPC (see: NAME).
 
 		|EXAMPLES
+		|	# Attach these to a keybind in your keyboard manager and try single and double tap.
+		|
+		|	# Normal mode
 		|	multipress -- notify-send 'activated once' __ notify-send 'activated twice'
+		|
+		|	# Command String mode
+		|	multipress -c -- "notify-send 'activated once'" "notify-send 'activated twice'"
 	HelpDoc
 	[[ $1 ]] && exit "$1"
 }
@@ -71,6 +84,7 @@ name=
 delim='__'
 activation_timeout='0.3'
 prevent_overrun=
+command_string_mode=
 dry_run=
 cmd_segs=()
 while [[ "$1" ]]; do
@@ -83,6 +97,8 @@ while [[ "$1" ]]; do
 			shift; activation_timeout=$1 ;;
 		'--prevent-overrun'|'-p')
 			prevent_overrun=1 ;;
+		'--command-string-mode'|'-c')
+			command_string_mode=1 ;;
 		'--dry-run')
 			dry_run=1 ;;
 		'--help'|'-h')
@@ -146,9 +162,12 @@ temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 
 
 # Derive the fifo path from a checksum of the instance name or the exec portion of the parameters
-[[ $name ]] && bashash_main "$name" || bashash_main "${cmd_segs[*]}"
+if [[ $name ]]; then
+	bashash_main "${command_string_mode}${name}"
+else
+	bashash_main "${command_string_mode}${cmd_segs[*]}"
+fi
 fifo_path="${temp_dir}/${0##*/}__${USER}_${bashash__out}"
-
 
 
 
@@ -173,27 +192,32 @@ exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
 
 
 
-# Define index and number of parameters of each command
-cmd_num_to_pos=()
-cmd_num_to_params=()
-cmds_last_index=0
-i=0
-for param in "${cmd_segs[@]}"; do
-	if [[ $param == "$delim" ]]; then
-		(( cmds_last_index++ )) || :
-		(( i++ )) || :
-		continue
-	fi
+if [[ $command_string_mode ]]; then
+	cmds_last_index=$(( ${#cmd_segs[@]} - 1 ))
 
-	if [[ ${cmd_num_to_pos[$cmds_last_index]} ]]; then
-		(( cmd_num_to_params[cmds_last_index]++ ))
-	else
-		# New command
-		cmd_num_to_pos[cmds_last_index]=$i
-		cmd_num_to_params[cmds_last_index]=1
-	fi
-	(( i++ )) || :
-done
+else
+	# Define index and number of parameters of each command
+	cmd_num_to_pos=()
+	cmd_num_to_params=()
+	cmds_last_index=0
+	i=0
+	for param in "${cmd_segs[@]}"; do
+		if [[ $param == "$delim" ]]; then
+			(( cmds_last_index++ )) || :
+			(( i++ )) || :
+			continue
+		fi
+
+		if [[ ${cmd_num_to_pos[$cmds_last_index]} ]]; then
+			(( cmd_num_to_params[cmds_last_index]++ ))
+		else
+			# New command
+			cmd_num_to_pos[cmds_last_index]=$i
+			cmd_num_to_params[cmds_last_index]=1
+		fi
+		(( i++ )) || :
+	done
+fi
 
 
 
@@ -207,19 +231,21 @@ if (( cmds_last_index > 0 )) || [[ ! $prevent_overrun ]]; then
 	done
 	(( cmd_num <= cmds_last_index )) || exit 0
 fi
-[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
-cmd_to_run=(${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}})
 
 
 
-if [[ $dry_run ]]; then
-	eval() {
-		printf '%q ' 'eval' "$@"; printf '\n'
-	} 1>&2
+if [[ $command_string_mode ]]; then
+	[[ ${cmd_segs[$cmd_num]} ]] || exit 0
+	[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
+	bash -c "${cmd_segs[$cmd_num]}" & disown
+	exit
 fi
 
 
 
+[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
+cmd_to_run=(${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}})
+[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
 eval -- "${cmd_to_run[@]}" & disown
 
 
