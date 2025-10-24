@@ -91,7 +91,7 @@ temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 
 # Derive the fifo path from a checksum of the instance name or the exec portion of the parameters
 [[ $name ]] && bashash_main "$name" || bashash_main "${command_segs[*]}"
-fifo_path=$temp_dir'/'${0##*/}'__'$USER'_'$bashash__out
+fifo_path="${temp_dir}/${0##*/}__${USER}_${bashash__out}"
 
 
 
@@ -104,12 +104,12 @@ fi
 
 
 # Create a non-blocking named piped that's deleted on EXIT
-[[ -e $fifo_path ]] && rm "$fifo_path"
-mkfifo --mode 0600 "$fifo_path"
+[[ -e $fifo_path ]] && rm -- "$fifo_path"
+mkfifo --mode 0600 -- "$fifo_path"
 exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
 
 on_exit() {
-	[[ -e $fifo_path ]] && rm -f "$fifo_path"
+	[[ -e $fifo_path ]] && rm -- "$fifo_path"
 }
 trap 'on_exit' 'EXIT'
 
