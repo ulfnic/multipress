@@ -237,7 +237,8 @@ execute_command() {
 	fi
 
 	[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
-	cmd_to_run=(${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}})
+	# Quote array expansion to preserve elements with spaces and special characters
+	cmd_to_run=("${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}}")
 	[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
 	# WARNING: eval executes arbitrary code - only use with trusted input
 	eval -- "${cmd_to_run[@]}" & disown
