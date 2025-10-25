@@ -189,6 +189,10 @@ setup_fifo() {
 	}
 	trap 'on_exit' EXIT INT TERM
 
+	# File descriptor setup for non-blocking FIFO communication:
+	# FD 5: Read+write (opened then immediately closed to prevent blocking)
+	# FD 3: Write-only (for sending activations to listening instance)
+	# FD 4: Read-only (for receiving activations in listening instance)
 	exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
 }
 
@@ -197,7 +201,9 @@ parse_commands() {
 	if [[ $command_string_mode ]]; then
 		command_count=${#command_segments[@]}
 	else
-		# Define index and number of parameters of each command
+		# Parse command segments into indexed commands for normal mode
+		# This builds two arrays: cmd_num_to_pos (starting position) and
+		# cmd_num_to_params (number of parameters) for each command
 		cmd_num_to_pos=()
 		cmd_num_to_params=()
 		command_count=1
@@ -205,6 +211,7 @@ parse_commands() {
 		current_cmd_index=0
 		set +e
 		for param in "${command_segments[@]}"; do
+			# Delimiter marks the boundary between commands
 			if [[ $param == "$delim" ]]; then
 				(( command_count++ ))
 				(( current_cmd_index++ ))
@@ -212,10 +219,12 @@ parse_commands() {
 				continue
 			fi
 
+			# Track position and count of parameters for each command
 			if [[ ${cmd_num_to_pos[$current_cmd_index]} ]]; then
+				# Add to existing command's parameter count
 				(( cmd_num_to_params[current_cmd_index]++ ))
 			else
-				# New command
+				# First parameter of new command: record starting position
 				cmd_num_to_pos[current_cmd_index]=$i
 				cmd_num_to_params[current_cmd_index]=1
 			fi
@@ -246,6 +255,8 @@ execute_command() {
 	if [[ $command_string_mode ]]; then
 		[[ ${command_segments[$activation_count]} ]] || exit 0
 		[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
+		# Background the command with & and disown to detach from this script
+		# This allows the command to continue running after this script exits
 		bash -c "${command_segments[$activation_count]}" & disown
 		exit
 	fi
@@ -255,6 +266,8 @@ execute_command() {
 	cmd_to_run=("${command_segments[@]:${cmd_num_to_pos[$activation_count]}:${cmd_num_to_params[$activation_count]}}")
 	[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
 	# WARNING: eval executes arbitrary code - only use with trusted input
+	# Background the command with & and disown to detach from this script
+	# This allows the command to continue running after this script exits
 	eval -- "${cmd_to_run[@]}" & disown
 }
 
