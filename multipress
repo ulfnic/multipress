@@ -108,11 +108,17 @@ parse_arguments() {
 	while [[ "$1" ]]; do
 		case $1 in
 			'--name'|'-n')
-				shift; name=$1 ;;
+				shift
+				[[ $1 && $1 != -* ]] || print_stderr 1 '%s\n' '--name requires an argument'
+				name=$1 ;;
 			'--delim'|'-d')
-				shift; delim=$1 ;;
+				shift
+				[[ $1 && $1 != -* ]] || print_stderr 1 '%s\n' '--delim requires an argument'
+				delim=$1 ;;
 			'--timeout'|'-t')
-				shift; activation_timeout=$1 ;;
+				shift
+				[[ $1 && $1 != -* ]] || print_stderr 1 '%s\n' '--timeout requires an argument'
+				activation_timeout=$1 ;;
 			'--prevent-overrun'|'-p')
 				prevent_overrun=1 ;;
 			'--command-string-mode'|'-c')
