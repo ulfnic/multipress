@@ -287,7 +287,12 @@ wait_for_activations() {
 execute_command() {
 	if [[ $command_string_mode ]]; then
 		[[ ${command_segments[$activation_count]} ]] || exit 0
-		[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
+		if [[ $dry_run ]]; then
+			printf '[DRY-RUN] Activation #%d (of %d) would execute:\n' "$((activation_count + 1))" "$command_count" 1>&2
+			printf '  Mode: Command String\n' 1>&2
+			printf '  Command: %s\n' "${command_segments[$activation_count]}" 1>&2
+			exit 0
+		fi
 		# Background the command with & and disown to detach from this script
 		# This allows the command to continue running after this script exits
 		bash -c "${command_segments[$activation_count]}" & disown
@@ -297,7 +302,16 @@ execute_command() {
 	[[ ${cmd_num_to_pos[$activation_count]} ]] || exit 0
 	# Quote array expansion to preserve elements with spaces and special characters
 	cmd_to_run=("${command_segments[@]:${cmd_num_to_pos[$activation_count]}:${cmd_num_to_params[$activation_count]}}")
-	[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
+	if [[ $dry_run ]]; then
+		printf '[DRY-RUN] Activation #%d (of %d) would execute:\n' "$((activation_count + 1))" "$command_count" 1>&2
+		printf '  Mode: Normal (eval)\n' 1>&2
+		printf '  Command: %q' "${cmd_to_run[0]}" 1>&2
+		for arg in "${cmd_to_run[@]:1}"; do
+			printf ' %q' "$arg" 1>&2
+		done
+		printf '\n' 1>&2
+		exit 0
+	fi
 	# WARNING: eval executes arbitrary code - only use with trusted input
 	# Background the command with & and disown to detach from this script
 	# This allows the command to continue running after this script exits
