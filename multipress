@@ -14,6 +14,37 @@ version_info() {
 }
 
 
+cleanup_fifos() {
+	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
+	[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
+	
+	local fifo_pattern="${temp_dir}/${0##*/}__${USER}_*"
+	local count=0
+	local file
+	
+	printf 'Cleaning up stale FIFO files in: %s\n' "$temp_dir" 1>&2
+	
+	# Find and remove matching FIFO files
+	for file in $fifo_pattern; do
+		[[ -e $file ]] || continue
+		if [[ -p $file ]]; then
+			rm -- "$file" && {
+				printf '  Removed: %s\n' "${file##*/}" 1>&2
+				(( count++ ))
+			}
+		fi
+	done
+	
+	if (( count == 0 )); then
+		printf '  No stale FIFO files found.\n' 1>&2
+	else
+		printf 'Cleaned up %d FIFO file(s).\n' "$count" 1>&2
+	fi
+	
+	exit 0
+}
+
+
 help_doc() {
 	{ read -r -d '' || :; [[ $REPLY == '|'* ]] && REPLY=${REPLY:1}; printf '%s' "${REPLY//$'\n|'/$'\n'}"; } <<-'HelpDoc'
 		|multipress [ARGUMENT...] [--] [COMMAND|DELIM...]
@@ -33,6 +64,7 @@ help_doc() {
 		|	-p|--prevent-overrun       Run the last COMMAND if reached by ACTIVATIONs
 		|	-c|--command-string-mode   See: Command String mode
 		|	--dry-run                  Do everything except running the COMMAND, print it instead
+		|	--cleanup                  Remove all stale FIFO files and exit
 		|	-h|--help                  Print help doc
 		|	-v|--version               Show version information
 		|	--                         End option processing
@@ -161,6 +193,8 @@ parse_arguments() {
 				command_string_mode=1 ;;
 			'--dry-run')
 				dry_run=1 ;;
+			'--cleanup')
+				cleanup_fifos ;;
 			'--version'|'-v')
 				version_info ;;
 			'--help'|'-h')
