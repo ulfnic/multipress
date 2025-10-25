@@ -1,12 +1,16 @@
 # multipress
 Run one of several commands based on frequency of execution within a rolling timeout.
 
-Useful for a variety of purposes such as extending keyboard shortcut support to include multi-tap combos.
+Example commands to attach to a keyboard shortcut for multi-tap selection of what runs.
 ```bash
-./multipress -- echo 1 __ echo 2 __ echo 3 & disown
-sleep 0.1
-./multipress -- echo 1 __ echo 2 __ echo 3 & disown
-# stdout: 2
+# Launch flameshot in a specific mode
+multipress -- flameshot gui __ flameshot gui --delay 3000 __ flameshot launcher
+
+# Type the date, or date and time
+multipress -- xdotool type "$(date +%Y-%m-%d)" __ xdotool type "$(date +%Y-%m-%dT%H:%M:%S)"
+
+# Place information in clipboard using -c Command String mode
+multipress -c -- "date +%Y-%m-%d | xsel -ob" "date +%Y-%m-%dT%H:%M:%S | xsel -ob"
 ```
 ---
 ```bash
@@ -30,7 +34,7 @@ ARGUEMENT
 	-t|--timeout SECONDS       Custom timeout for waiting for next ACTIVATION, default: 0.3
 	-p|--prevent-overrun       Run the last COMMAND if reached by ACTIVATIONs
 	-c|--command-string-mode   See: Command String mode
-	--dry-run                  Do everything except running the COMMAND, print it instead
+	--dry-run                  Do everything except run the COMMAND, print it instead
 	-h|--help                  Print help doc
 	--                         End option processing
 	COMMAND || DELIM

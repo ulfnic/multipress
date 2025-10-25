@@ -21,7 +21,7 @@ help_doc() {
 		|	-t|--timeout SECONDS       Custom timeout for waiting for next ACTIVATION, default: 0.3
 		|	-p|--prevent-overrun       Run the last COMMAND if reached by ACTIVATIONs
 		|	-c|--command-string-mode   See: Command String mode
-		|	--dry-run                  Do everything except running the COMMAND, print it instead
+		|	--dry-run                  Do everything except run the COMMAND, print it instead
 		|	-h|--help                  Print help doc
 		|	--                         End option processing
 		|	COMMAND || DELIM
