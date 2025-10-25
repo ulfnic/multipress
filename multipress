@@ -42,6 +42,7 @@ help_doc() {
 		|	Normal mode:
 		|		A series of command(s) with parameters divided by DELIM that undergo shell
 		|		interpretation and are evaluated with eval.
+		|		WARNING: Uses eval which can execute arbitrary code. Only use with trusted input.
 		|
 		|	Command String mode:
 		|		Does not recognize DELIM. A series of command string(s) evaluated with bash -c
@@ -238,6 +239,7 @@ execute_command() {
 	[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
 	cmd_to_run=(${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}})
 	[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
+	# WARNING: eval executes arbitrary code - only use with trusted input
 	eval -- "${cmd_to_run[@]}" & disown
 }
 
