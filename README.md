@@ -1,6 +1,9 @@
 # multipress
 Run one of several commands based on frequency of execution within a rolling timeout.
 
+## better_multipress
+Original multipress was solidly 'meh'.  Now its better.
+
 Useful for a variety of purposes such as extending keyboard shortcut support to include multi-tap combos.
 ```bash
 ./multipress -- echo 1 __ echo 2 __ echo 3 & disown
