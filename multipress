@@ -237,19 +237,20 @@ fi
 if [[ $is_command_string_mode ]]; then
 	[[ ${cmd_segs[$cmd_num]} ]] || exit 0
 	cmd_to_run=${cmd_segs[$cmd_num]}
-	[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
-	bash -c "$cmd_to_run" & disown
-	[[ $dry_run ]] && unset -f bash
 
 else
 	[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
 	MULTIPRESS__SELECTED_CMD=("${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}}")
-	[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
-	cmd_to_run=$(declare -p MULTIPRESS__SELECTED_CMD)
-	cmd_to_run+='; "${MULTIPRESS__SELECTED_CMD[@]}"'
-	bash -c "$cmd_to_run" & disown
-	[[ $dry_run ]] && unset -f bash
+	cmd_to_run=
+	cmd_to_run+=$(declare -p MULTIPRESS__SELECTED_CMD)';'
+	cmd_to_run+='"${MULTIPRESS__SELECTED_CMD[@]}";'
 fi
+
+
+
+[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
+bash -c "$cmd_to_run" & disown
+[[ $dry_run ]] && unset -f bash
 
 
 
