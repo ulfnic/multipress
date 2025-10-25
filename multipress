@@ -80,54 +80,6 @@ print_stderr() {
 
 
 
-name=
-delim='__'
-activation_timeout='0.3'
-prevent_overrun=
-command_string_mode=
-dry_run=
-cmd_segs=()
-while [[ "$1" ]]; do
-	case $1 in
-		'--name'|'-n')
-			shift; name=$1 ;;
-		'--delim'|'-d')
-			shift; delim=$1 ;;
-		'--timeout'|'-t')
-			shift; activation_timeout=$1 ;;
-		'--prevent-overrun'|'-p')
-			prevent_overrun=1 ;;
-		'--command-string-mode'|'-c')
-			command_string_mode=1 ;;
-		'--dry-run')
-			dry_run=1 ;;
-		'--help'|'-h')
-			help_doc 0 ;;
-		'--')
-			shift; break ;;
-		'-'*)
-			print_stderr 1 '%s\n' 'unrecognized option: '"$1" ;;
-		*)
-			cmd_segs+=("$1")
-	esac
-	shift
-done
-cmd_segs+=("$@")
-
-
-
-# Validate arguements
-[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
-[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
-
-
-
-# Define temp directory for fifo file
-temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
-[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
-
-
-
 # Define function for generating fast checksums
 bashash_main() {
 	bashash__out=
@@ -152,101 +104,152 @@ bashash_main() {
 
 
 
-# Validate and define variables
-[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
-[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
+main() {
+	name=
+	delim='__'
+	activation_timeout='0.3'
+	prevent_overrun=
+	command_string_mode=
+	dry_run=
+	cmd_segs=()
+	while [[ "$1" ]]; do
+		case $1 in
+			'--name'|'-n')
+				shift; name=$1 ;;
+			'--delim'|'-d')
+				shift; delim=$1 ;;
+			'--timeout'|'-t')
+				shift; activation_timeout=$1 ;;
+			'--prevent-overrun'|'-p')
+				prevent_overrun=1 ;;
+			'--command-string-mode'|'-c')
+				command_string_mode=1 ;;
+			'--dry-run')
+				dry_run=1 ;;
+			'--help'|'-h')
+				help_doc 0 ;;
+			'--')
+				shift; break ;;
+			'-'*)
+				print_stderr 1 '%s\n' 'unrecognized option: '"$1" ;;
+			*)
+				cmd_segs+=("$1")
+		esac
+		shift
+	done
+	cmd_segs+=("$@")
 
-temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
-[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
+
+
+	# Validate arguements
+	[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
+	[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
 
 
 
-# Derive the fifo path from a checksum of the instance name or the exec portion of the parameters
-if [[ $name ]]; then
-	bashash_main "${command_string_mode}${name}"
-else
-	bashash_main "${command_string_mode}${cmd_segs[*]}"
-fi
-fifo_path="${temp_dir}/${0##*/}__${USER}_${bashash__out}"
+	# Define temp directory for fifo file
+	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
+	[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
 
 
 
-# If an instance is already running, perform an activation and exit
-if [[ -p $fifo_path ]]; then
-	printf '\n' > "$fifo_path"
-	exit
-fi
+	# Validate and define variables
+	[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
+	[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
+
+	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
+	[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
 
 
 
-# Create a non-blocking fifo that's removed on EXIT
-[[ -e $fifo_path ]] && rm -- "$fifo_path"
+	# Derive the fifo path from a checksum of the instance name or the exec portion of the parameters
+	if [[ $name ]]; then
+		bashash_main "${command_string_mode}${name}"
+	else
+		bashash_main "${command_string_mode}${cmd_segs[*]}"
+	fi
+	fifo_path="${temp_dir}/${0##*/}__${USER}_${bashash__out}"
 
-on_exit() {
+
+
+	# If an instance is already running, perform an activation and exit
+	if [[ -p $fifo_path ]]; then
+		printf '\n' > "$fifo_path"
+		exit
+	fi
+
+
+
+	# Create a non-blocking fifo that's removed on EXIT
 	[[ -e $fifo_path ]] && rm -- "$fifo_path"
-}
-trap 'on_exit' 'EXIT'
 
-mkfifo --mode 0600 -- "$fifo_path"
-exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
+	on_exit() {
+		[[ -e $fifo_path ]] && rm -- "$fifo_path"
+	}
+	trap 'on_exit' 'EXIT'
+
+	mkfifo --mode 0600 -- "$fifo_path"
+	exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
 
 
 
-if [[ $command_string_mode ]]; then
-	cmds_last_index=$(( ${#cmd_segs[@]} - 1 ))
+	if [[ $command_string_mode ]]; then
+		cmds_last_index=$(( ${#cmd_segs[@]} - 1 ))
 
-else
-	# Define index and number of parameters of each command
-	cmd_num_to_pos=()
-	cmd_num_to_params=()
-	cmds_last_index=0
-	i=0
-	for param in "${cmd_segs[@]}"; do
-		if [[ $param == "$delim" ]]; then
-			(( cmds_last_index++ )) || :
+	else
+		# Define index and number of parameters of each command
+		cmd_num_to_pos=()
+		cmd_num_to_params=()
+		cmds_last_index=0
+		i=0
+		for param in "${cmd_segs[@]}"; do
+			if [[ $param == "$delim" ]]; then
+				(( cmds_last_index++ )) || :
+				(( i++ )) || :
+				continue
+			fi
+
+			if [[ ${cmd_num_to_pos[$cmds_last_index]} ]]; then
+				(( cmd_num_to_params[cmds_last_index]++ ))
+			else
+				# New command
+				cmd_num_to_pos[cmds_last_index]=$i
+				cmd_num_to_params[cmds_last_index]=1
+			fi
 			(( i++ )) || :
-			continue
-		fi
-
-		if [[ ${cmd_num_to_pos[$cmds_last_index]} ]]; then
-			(( cmd_num_to_params[cmds_last_index]++ ))
-		else
-			# New command
-			cmd_num_to_pos[cmds_last_index]=$i
-			cmd_num_to_params[cmds_last_index]=1
-		fi
-		(( i++ )) || :
-	done
-fi
+		done
+	fi
 
 
 
-# Define command to run according to script activations within the rolling delay
-# Skip reading for script activations if there's only one command and overun is prevented
-cmd_num=0
-if (( cmds_last_index > 0 )) || [[ ! $prevent_overrun ]]; then
-	while read -t "$activation_timeout" -u 4; do
-		(( cmd_num++ )) || :
-		[[ $prevent_overrun ]] && (( cmd_num == cmds_last_index )) && break
-	done
-	(( cmd_num <= cmds_last_index )) || exit 0
-fi
+	# Define command to run according to script activations within the rolling delay
+	# Skip reading for script activations if there's only one command and overun is prevented
+	cmd_num=0
+	if (( cmds_last_index > 0 )) || [[ ! $prevent_overrun ]]; then
+		while read -t "$activation_timeout" -u 4; do
+			(( cmd_num++ )) || :
+			[[ $prevent_overrun ]] && (( cmd_num == cmds_last_index )) && break
+		done
+		(( cmd_num <= cmds_last_index )) || exit 0
+	fi
 
 
 
-if [[ $command_string_mode ]]; then
-	[[ ${cmd_segs[$cmd_num]} ]] || exit 0
-	[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
-	bash -c "${cmd_segs[$cmd_num]}" & disown
-	exit
-fi
+	if [[ $command_string_mode ]]; then
+		[[ ${cmd_segs[$cmd_num]} ]] || exit 0
+		[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
+		bash -c "${cmd_segs[$cmd_num]}" & disown
+		exit
+	fi
 
 
 
-[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
-cmd_to_run=(${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}})
-[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
-eval -- "${cmd_to_run[@]}" & disown
+	[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
+	cmd_to_run=(${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}})
+	[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
+	eval -- "${cmd_to_run[@]}" & disown
+}
 
 
 
+main "$@"
