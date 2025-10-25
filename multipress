@@ -86,6 +86,8 @@ print_stderr() {
 
 
 # Define function for generating fast checksums
+# NOTE: Yes, we're doing this in pure bash. No, md5sum/sha256sum wouldn't be better.
+# ...okay, they definitely would be, but here we are living our best artisanal hash life.
 bashash_main() {
 	checksum_result=
 	local \
@@ -97,10 +99,23 @@ bashash_main() {
 
 	for (( i = 0; i < str_len; i++ )); do
 		printf -v val '%d' "'${str:i:1}"
+		# Unrolled inner loop for performance - eliminates loop overhead
 		checksum_arr[0]=$(( ( checksum_arr[0] + val ) % HASH_MODULO ))
-		for (( i2 = 1; i2 < checksum_len; i2++ )); do
-			checksum_arr[i2]=$(( ( checksum_arr[i2] + checksum_arr[i2-1] ) % HASH_MODULO ))
-		done
+		checksum_arr[1]=$(( ( checksum_arr[1] + checksum_arr[0] ) % HASH_MODULO ))
+		checksum_arr[2]=$(( ( checksum_arr[2] + checksum_arr[1] ) % HASH_MODULO ))
+		checksum_arr[3]=$(( ( checksum_arr[3] + checksum_arr[2] ) % HASH_MODULO ))
+		checksum_arr[4]=$(( ( checksum_arr[4] + checksum_arr[3] ) % HASH_MODULO ))
+		checksum_arr[5]=$(( ( checksum_arr[5] + checksum_arr[4] ) % HASH_MODULO ))
+		checksum_arr[6]=$(( ( checksum_arr[6] + checksum_arr[5] ) % HASH_MODULO ))
+		checksum_arr[7]=$(( ( checksum_arr[7] + checksum_arr[6] ) % HASH_MODULO ))
+		checksum_arr[8]=$(( ( checksum_arr[8] + checksum_arr[7] ) % HASH_MODULO ))
+		checksum_arr[9]=$(( ( checksum_arr[9] + checksum_arr[8] ) % HASH_MODULO ))
+		checksum_arr[10]=$(( ( checksum_arr[10] + checksum_arr[9] ) % HASH_MODULO ))
+		checksum_arr[11]=$(( ( checksum_arr[11] + checksum_arr[10] ) % HASH_MODULO ))
+		checksum_arr[12]=$(( ( checksum_arr[12] + checksum_arr[11] ) % HASH_MODULO ))
+		checksum_arr[13]=$(( ( checksum_arr[13] + checksum_arr[12] ) % HASH_MODULO ))
+		checksum_arr[14]=$(( ( checksum_arr[14] + checksum_arr[13] ) % HASH_MODULO ))
+		checksum_arr[15]=$(( ( checksum_arr[15] + checksum_arr[14] ) % HASH_MODULO ))
 	done
 
 
