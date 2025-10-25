@@ -2,6 +2,10 @@
 [[ $DEBUG ]] && set -x
 set -o errexit
 
+# Constants
+readonly CHECKSUM_LENGTH=16
+readonly HASH_MODULO=256
+
 
 help_doc() {
 	{ read -r -d '' || :; [[ $REPLY == '|'* ]] && REPLY=${REPLY:1}; printf '%s' "${REPLY//$'\n|'/$'\n'}"; } <<-'HelpDoc'
@@ -86,16 +90,16 @@ bashash_main() {
 	checksum_result=
 	local \
 		str=$1 \
-		checksum_len=${2:-16} \
+		checksum_len=${2:-$CHECKSUM_LENGTH} \
 		checksum_arr=(1)
 	local str_len=${#str}
 
 
 	for (( i = 0; i < str_len; i++ )); do
 		printf -v val '%d' "'${str:i:1}"
-		checksum_arr[0]=$(( ( checksum_arr[0] + val ) % 256 ))
+		checksum_arr[0]=$(( ( checksum_arr[0] + val ) % HASH_MODULO ))
 		for (( i2 = 1; i2 < checksum_len; i2++ )); do
-			checksum_arr[i2]=$(( ( checksum_arr[i2] + checksum_arr[i2-1] ) % 256 ))
+			checksum_arr[i2]=$(( ( checksum_arr[i2] + checksum_arr[i2-1] ) % HASH_MODULO ))
 		done
 	done
 
