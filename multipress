@@ -83,7 +83,7 @@ print_stderr() {
 
 # Define function for generating fast checksums
 bashash_main() {
-	bashash__out=
+	checksum_result=
 	local \
 		str=$1 \
 		checksum_len=${2:-16} \
@@ -100,7 +100,7 @@ bashash_main() {
 	done
 
 
-	printf -v bashash__out '%02x' "${checksum_arr[@]}"
+	printf -v checksum_result '%02x' "${checksum_arr[@]}"
 }
 
 
@@ -133,11 +133,11 @@ parse_arguments() {
 			'-'*)
 				print_stderr 1 '%s\n' 'unrecognized option: '"$1" ;;
 			*)
-				cmd_segs+=("$1")
+				command_segments+=("$1")
 		esac
 		shift
 	done
-	cmd_segs+=("$@")
+	command_segments+=("$@")
 }
 
 
@@ -146,7 +146,7 @@ validate_inputs() {
 	[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
 	[[ $delim =~ ^[[:space:]]*$ ]] && print_stderr 1 '%s\n' 'delimiter cannot be empty or whitespace-only'
 	[[ $delim =~ [\'\"\$\`\\] ]] && print_stderr 1 '%s\n' 'delimiter cannot contain quotes, dollar signs, backticks, or backslashes'
-	[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
+	[[ ${#command_segments[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
 	[[ $activation_timeout =~ ^[0-9]+\.?[0-9]*$ ]] || print_stderr 1 '%s\n' 'timeout must be a valid number'
 	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 	[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
@@ -158,9 +158,9 @@ setup_fifo() {
 	if [[ $name ]]; then
 		bashash_main "${command_string_mode}${name}"
 	else
-		bashash_main "${command_string_mode}${cmd_segs[*]}"
+		bashash_main "${command_string_mode}${command_segments[*]}"
 	fi
-	fifo_path="${temp_dir}/${0##*/}__${USER}_${bashash__out}"
+	fifo_path="${temp_dir}/${0##*/}__${USER}_${checksum_result}"
 
 	# Atomically attempt to create FIFO to avoid race conditions
 	if ! mkfifo --mode 0600 -- "$fifo_path" 2>/dev/null; then
@@ -191,27 +191,27 @@ setup_fifo() {
 
 parse_commands() {
 	if [[ $command_string_mode ]]; then
-		cmds_last_index=$(( ${#cmd_segs[@]} - 1 ))
+		max_command_index=$(( ${#command_segments[@]} - 1 ))
 	else
 		# Define index and number of parameters of each command
 		cmd_num_to_pos=()
 		cmd_num_to_params=()
-		cmds_last_index=0
+		max_command_index=0
 		i=0
 		set +e
-		for param in "${cmd_segs[@]}"; do
+		for param in "${command_segments[@]}"; do
 			if [[ $param == "$delim" ]]; then
-				(( cmds_last_index++ ))
+				(( max_command_index++ ))
 				(( i++ ))
 				continue
 			fi
 
-			if [[ ${cmd_num_to_pos[$cmds_last_index]} ]]; then
-				(( cmd_num_to_params[cmds_last_index]++ ))
+			if [[ ${cmd_num_to_pos[$max_command_index]} ]]; then
+				(( cmd_num_to_params[max_command_index]++ ))
 			else
 				# New command
-				cmd_num_to_pos[cmds_last_index]=$i
-				cmd_num_to_params[cmds_last_index]=1
+				cmd_num_to_pos[max_command_index]=$i
+				cmd_num_to_params[max_command_index]=1
 			fi
 			(( i++ ))
 		done
@@ -223,30 +223,30 @@ parse_commands() {
 wait_for_activations() {
 	# Define command to run according to script activations within the rolling delay
 	# Skip reading for script activations if there's only one command and overun is prevented
-	cmd_num=0
-	if (( cmds_last_index > 0 )) || [[ ! $prevent_overrun ]]; then
+	activation_count=0
+	if (( max_command_index > 0 )) || [[ ! $prevent_overrun ]]; then
 		set +e
 		while read -t "$activation_timeout" -u 4; do
-			(( cmd_num++ ))
-			[[ $prevent_overrun ]] && (( cmd_num == cmds_last_index )) && break
+			(( activation_count++ ))
+			[[ $prevent_overrun ]] && (( activation_count == max_command_index )) && break
 		done
 		set -e
-		(( cmd_num <= cmds_last_index )) || exit 0
+		(( activation_count <= max_command_index )) || exit 0
 	fi
 }
 
 
 execute_command() {
 	if [[ $command_string_mode ]]; then
-		[[ ${cmd_segs[$cmd_num]} ]] || exit 0
+		[[ ${command_segments[$activation_count]} ]] || exit 0
 		[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
-		bash -c "${cmd_segs[$cmd_num]}" & disown
+		bash -c "${command_segments[$activation_count]}" & disown
 		exit
 	fi
 
-	[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
+	[[ ${cmd_num_to_pos[$activation_count]} ]] || exit 0
 	# Quote array expansion to preserve elements with spaces and special characters
-	cmd_to_run=("${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}}")
+	cmd_to_run=("${command_segments[@]:${cmd_num_to_pos[$activation_count]}:${cmd_num_to_params[$activation_count]}}")
 	[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
 	# WARNING: eval executes arbitrary code - only use with trusted input
 	eval -- "${cmd_to_run[@]}" & disown
@@ -261,7 +261,7 @@ main() {
 	prevent_overrun=
 	command_string_mode=
 	dry_run=
-	cmd_segs=()
+	command_segments=()
 	
 	parse_arguments "$@"
 	validate_inputs
