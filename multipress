@@ -143,6 +143,8 @@ parse_arguments() {
 validate_inputs() {
 	command -v mkfifo >/dev/null 2>&1 || print_stderr 1 '%s\n' 'mkfifo command not found'
 	[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
+	[[ $delim =~ ^[[:space:]]*$ ]] && print_stderr 1 '%s\n' 'delimiter cannot be empty or whitespace-only'
+	[[ $delim =~ [\'\"\$\`\\] ]] && print_stderr 1 '%s\n' 'delimiter cannot contain quotes, dollar signs, backticks, or backslashes'
 	[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
 	[[ $activation_timeout =~ ^[0-9]+\.?[0-9]*$ ]] || print_stderr 1 '%s\n' 'timeout must be a valid number'
 	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
