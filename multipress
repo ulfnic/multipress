@@ -162,21 +162,29 @@ setup_fifo() {
 	fi
 	fifo_path="${temp_dir}/${0##*/}__${USER}_${bashash__out}"
 
-	# If an instance is already running, perform an activation and exit
-	if [[ -p $fifo_path ]]; then
-		printf '\n' > "$fifo_path"
-		exit
+	# Atomically attempt to create FIFO to avoid race conditions
+	if ! mkfifo --mode 0600 -- "$fifo_path" 2>/dev/null; then
+		# Creation failed - check if it's because a pipe already exists
+		if [[ -p $fifo_path ]]; then
+			# Another instance is running, perform activation and exit
+			printf '\n' > "$fifo_path"
+			exit
+		elif [[ -e $fifo_path ]]; then
+			# Some other file exists at this path, remove it and retry
+			rm -- "$fifo_path"
+			mkfifo --mode 0600 -- "$fifo_path" || print_stderr 1 '%s\n' 'failed to create FIFO after removing existing file'
+		else
+			# mkfifo failed for another reason
+			print_stderr 1 '%s\n' 'failed to create FIFO'
+		fi
 	fi
 
-	# Create a non-blocking fifo that's removed on EXIT
-	[[ -e $fifo_path ]] && rm -- "$fifo_path"
-
+	# Set up cleanup trap and file descriptors
 	on_exit() {
 		[[ -e $fifo_path ]] && rm -- "$fifo_path"
 	}
 	trap 'on_exit' EXIT INT TERM
 
-	mkfifo --mode 0600 -- "$fifo_path"
 	exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
 }
 
