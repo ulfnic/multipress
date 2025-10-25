@@ -14,6 +14,37 @@ version_info() {
 }
 
 
+list_instances() {
+	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
+	[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
+	
+	local fifo_pattern="${temp_dir}/${0##*/}__${USER}_*"
+	local count=0
+	local file
+	
+	printf 'Active multipress instances in: %s\n' "$temp_dir" 1>&2
+	printf '\n' 1>&2
+	
+	# Find and list matching FIFO files
+	for file in $fifo_pattern; do
+		[[ -e $file ]] || continue
+		if [[ -p $file ]]; then
+			printf '  %s\n' "${file##*/}" 1>&2
+			(( count++ ))
+		fi
+	done
+	
+	printf '\n' 1>&2
+	if (( count == 0 )); then
+		printf 'No active instances found.\n' 1>&2
+	else
+		printf 'Total: %d active instance(s)\n' "$count" 1>&2
+	fi
+	
+	exit 0
+}
+
+
 cleanup_fifos() {
 	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 	[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
@@ -64,6 +95,7 @@ help_doc() {
 		|	-p|--prevent-overrun       Run the last COMMAND if reached by ACTIVATIONs
 		|	-c|--command-string-mode   See: Command String mode
 		|	--dry-run                  Do everything except running the COMMAND, print it instead
+		|	--list                     List all active multipress instances and exit
 		|	--cleanup                  Remove all stale FIFO files and exit
 		|	-h|--help                  Print help doc
 		|	-v|--version               Show version information
@@ -193,6 +225,8 @@ parse_arguments() {
 				command_string_mode=1 ;;
 			'--dry-run')
 				dry_run=1 ;;
+			'--list')
+				list_instances ;;
 			'--cleanup')
 				cleanup_fifos ;;
 			'--version'|'-v')
