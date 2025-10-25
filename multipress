@@ -187,10 +187,11 @@ parse_commands() {
 		cmd_num_to_params=()
 		cmds_last_index=0
 		i=0
+		set +e
 		for param in "${cmd_segs[@]}"; do
 			if [[ $param == "$delim" ]]; then
-				(( cmds_last_index++ )) || :
-				(( i++ )) || :
+				(( cmds_last_index++ ))
+				(( i++ ))
 				continue
 			fi
 
@@ -201,8 +202,9 @@ parse_commands() {
 				cmd_num_to_pos[cmds_last_index]=$i
 				cmd_num_to_params[cmds_last_index]=1
 			fi
-			(( i++ )) || :
+			(( i++ ))
 		done
+		set -e
 	fi
 }
 
@@ -212,10 +214,12 @@ wait_for_activations() {
 	# Skip reading for script activations if there's only one command and overun is prevented
 	cmd_num=0
 	if (( cmds_last_index > 0 )) || [[ ! $prevent_overrun ]]; then
+		set +e
 		while read -t "$activation_timeout" -u 4; do
-			(( cmd_num++ )) || :
+			(( cmd_num++ ))
 			[[ $prevent_overrun ]] && (( cmd_num == cmds_last_index )) && break
 		done
+		set -e
 		(( cmd_num <= cmds_last_index )) || exit 0
 	fi
 }
