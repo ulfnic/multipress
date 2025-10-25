@@ -137,6 +137,7 @@ parse_arguments() {
 validate_inputs() {
 	[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
 	[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
+	[[ $activation_timeout =~ ^[0-9]+\.?[0-9]*$ ]] || print_stderr 1 '%s\n' 'timeout must be a valid number'
 	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 	[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
 }
