@@ -104,14 +104,7 @@ bashash_main() {
 
 
 
-main() {
-	name=
-	delim='__'
-	activation_timeout='0.3'
-	prevent_overrun=
-	command_string_mode=
-	dry_run=
-	cmd_segs=()
+parse_arguments() {
 	while [[ "$1" ]]; do
 		case $1 in
 			'--name'|'-n')
@@ -138,17 +131,18 @@ main() {
 		shift
 	done
 	cmd_segs+=("$@")
+}
 
 
-
-	# Validate arguments and define temp directory
+validate_inputs() {
 	[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
 	[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
 	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 	[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
+}
 
 
-
+setup_fifo() {
 	# Derive the fifo path from a checksum of the instance name or the exec portion of the parameters
 	if [[ $name ]]; then
 		bashash_main "${command_string_mode}${name}"
@@ -157,15 +151,11 @@ main() {
 	fi
 	fifo_path="${temp_dir}/${0##*/}__${USER}_${bashash__out}"
 
-
-
 	# If an instance is already running, perform an activation and exit
 	if [[ -p $fifo_path ]]; then
 		printf '\n' > "$fifo_path"
 		exit
 	fi
-
-
 
 	# Create a non-blocking fifo that's removed on EXIT
 	[[ -e $fifo_path ]] && rm -- "$fifo_path"
@@ -177,12 +167,12 @@ main() {
 
 	mkfifo --mode 0600 -- "$fifo_path"
 	exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
+}
 
 
-
+parse_commands() {
 	if [[ $command_string_mode ]]; then
 		cmds_last_index=$(( ${#cmd_segs[@]} - 1 ))
-
 	else
 		# Define index and number of parameters of each command
 		cmd_num_to_pos=()
@@ -206,9 +196,10 @@ main() {
 			(( i++ )) || :
 		done
 	fi
+}
 
 
-
+wait_for_activations() {
 	# Define command to run according to script activations within the rolling delay
 	# Skip reading for script activations if there's only one command and overun is prevented
 	cmd_num=0
@@ -219,9 +210,10 @@ main() {
 		done
 		(( cmd_num <= cmds_last_index )) || exit 0
 	fi
+}
 
 
-
+execute_command() {
 	if [[ $command_string_mode ]]; then
 		[[ ${cmd_segs[$cmd_num]} ]] || exit 0
 		[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
@@ -229,12 +221,29 @@ main() {
 		exit
 	fi
 
-
-
 	[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
 	cmd_to_run=(${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}})
 	[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
 	eval -- "${cmd_to_run[@]}" & disown
+}
+
+
+main() {
+	# Initialize variables
+	name=
+	delim='__'
+	activation_timeout='0.3'
+	prevent_overrun=
+	command_string_mode=
+	dry_run=
+	cmd_segs=()
+	
+	parse_arguments "$@"
+	validate_inputs
+	setup_fifo
+	parse_commands
+	wait_for_activations
+	execute_command
 }
 
 
