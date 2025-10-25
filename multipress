@@ -84,7 +84,7 @@ name=
 delim='__'
 activation_timeout='0.3'
 prevent_overrun=
-command_string_mode=
+is_command_string_mode=
 dry_run=
 cmd_segs=()
 while [[ "$1" ]]; do
@@ -98,7 +98,7 @@ while [[ "$1" ]]; do
 		'--prevent-overrun'|'-p')
 			prevent_overrun=1 ;;
 		'--command-string-mode'|'-c')
-			command_string_mode=1 ;;
+			is_command_string_mode=1 ;;
 		'--dry-run')
 			dry_run=1 ;;
 		'--help'|'-h')
@@ -163,9 +163,9 @@ temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 
 # Derive the fifo path from a checksum of the instance name or the exec portion of the parameters
 if [[ $name ]]; then
-	bashash_main "${command_string_mode}${name}"
+	bashash_main "${is_command_string_mode}${name}"
 else
-	bashash_main "${command_string_mode}${cmd_segs[*]}"
+	bashash_main "${is_command_string_mode}${cmd_segs[*]}"
 fi
 fifo_path="${temp_dir}/${0##*/}__${USER}_${bashash__out}"
 
@@ -192,7 +192,7 @@ exec 5<>"$fifo_path" 3>"$fifo_path" 4<"$fifo_path" 5>&-
 
 
 
-if [[ $command_string_mode ]]; then
+if [[ $is_command_string_mode ]]; then
 	cmds_last_index=$(( ${#cmd_segs[@]} - 1 ))
 
 else
@@ -234,19 +234,20 @@ fi
 
 
 
-if [[ $command_string_mode ]]; then
+if [[ $is_command_string_mode ]]; then
 	[[ ${cmd_segs[$cmd_num]} ]] || exit 0
+	cmd_to_run=${cmd_segs[$cmd_num]}
 	[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
-	bash -c "${cmd_segs[$cmd_num]}" & disown
-	exit
+	bash -c "$cmd_to_run" & disown
+	[[ $dry_run ]] && unset -f bash
+
+else
+	[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
+	cmd_to_run=(${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}})
+	[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
+	eval -- "${cmd_to_run[@]}" & disown
+	[[ $dry_run ]] && unset -f eval
 fi
-
-
-
-[[ ${cmd_num_to_pos[$cmd_num]} ]] || exit 0
-cmd_to_run=(${cmd_segs[@]:${cmd_num_to_pos[$cmd_num]}:${cmd_num_to_params[$cmd_num]}})
-[[ $dry_run ]] && eval() { printf '%q ' 'eval' "$@"; printf '\n'; } 1>&2
-eval -- "${cmd_to_run[@]}" & disown
 
 
 
