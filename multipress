@@ -9,7 +9,7 @@ readonly HASH_MODULO=256
 
 help_doc() {
 	{ read -r -d '' || :; [[ $REPLY == '|'* ]] && REPLY=${REPLY:1}; printf '%s' "${REPLY//$'\n|'/$'\n'}"; } <<-'HelpDoc'
-		|multipress [ARGUEMENT...] [--] [COMMAND|DELIM...]
+		|multipress [ARGUMENT...] [--] [COMMAND|DELIM...]
 		|
 		|Run one of several COMMANDs based on frequency of execution within a rolling timeout.
 		|
@@ -19,9 +19,9 @@ help_doc() {
 		|DEPENDENCIES
 		|	mkfifo
 
-		|ARGUEMENT
+		|ARGUMENT
 		|	-n|--name NAME             Custom name to use for the NAME of the instance
-		|	-d|--delim DELIM           Custom delimiter to seperate COMMANDs, default: '__'
+		|	-d|--delim DELIM           Custom delimiter to separate COMMANDs, default: '__'
 		|	-t|--timeout SECONDS       Custom timeout for waiting for next ACTIVATION, default: 0.3
 		|	-p|--prevent-overrun       Run the last COMMAND if reached by ACTIVATIONs
 		|	-c|--command-string-mode   See: Command String mode
@@ -52,7 +52,7 @@ help_doc() {
 		|		Does not recognize DELIM. A series of command string(s) evaluated with bash -c
 		
 		|ACTIVATION
-		|	Each execution of the script constitutions an ACTIVATION under a given NAME.
+		|	Each execution of the script constitutes an ACTIVATION under a given NAME.
 		|
 		|	If no script is listening under a NAME, the script listens for ACTIVATIONs until
 		|	the timeout is reached from last ACTIVATION.
@@ -228,7 +228,7 @@ parse_commands() {
 
 wait_for_activations() {
 	# Define command to run according to script activations within the rolling delay
-	# Skip reading for script activations if there's only one command and overun is prevented
+	# Skip reading for script activations if there's only one command and overrun is prevented
 	activation_count=0
 	if (( command_count > 1 )) || [[ ! $prevent_overrun ]]; then
 		set +e
