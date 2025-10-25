@@ -34,7 +34,7 @@ ARGUEMENT
 	-t|--timeout SECONDS       Custom timeout for waiting for next ACTIVATION, default: 0.3
 	-p|--prevent-overrun       Run the last COMMAND if reached by ACTIVATIONs
 	-c|--command-string-mode   See: Command String mode
-	--dry-run                  Do everything except run the COMMAND, print it instead
+	--dry-run                  Do everything except run the COMMAND, print it to stdout
 	-h|--help                  Print help doc
 	--                         End option processing
 	COMMAND || DELIM
@@ -53,8 +53,8 @@ COMMAND || DELIM
 	For example, two timely ACTIVATIONs of the script will run the second COMMAND.
 
 	Normal mode:
-		A series of command(s) with parameters divided by DELIM that undergo shell
-		interpretation and are evaluated with eval.
+		A series of single command(s) including their parameters divided by DELIM
+		which are run without shell interpretation/expansion.
 
 	Command String mode:
 		Does not recognize DELIM. A series of command string(s) evaluated with bash -c

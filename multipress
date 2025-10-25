@@ -21,7 +21,7 @@ help_doc() {
 		|	-t|--timeout SECONDS       Custom timeout for waiting for next ACTIVATION, default: 0.3
 		|	-p|--prevent-overrun       Run the last COMMAND if reached by ACTIVATIONs
 		|	-c|--command-string-mode   See: Command String mode
-		|	--dry-run                  Do everything except run the COMMAND, print it instead
+		|	--dry-run                  Do everything except run the COMMAND, print it to stdout
 		|	-h|--help                  Print help doc
 		|	--                         End option processing
 		|	COMMAND || DELIM
@@ -248,7 +248,7 @@ fi
 
 
 
-[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; } 1>&2
+[[ $dry_run ]] && bash() { printf '%q ' 'bash' "$@"; printf '\n'; }
 bash -c "$cmd_to_run" & disown
 [[ $dry_run ]] && unset -f bash
 
