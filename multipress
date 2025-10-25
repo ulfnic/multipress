@@ -141,22 +141,9 @@ main() {
 
 
 
-	# Validate arguements
+	# Validate arguments and define temp directory
 	[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
 	[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
-
-
-
-	# Define temp directory for fifo file
-	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
-	[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
-
-
-
-	# Validate and define variables
-	[[ $delim ]] || print_stderr 1 '%s\n' 'no command delimiter provided'
-	[[ ${#cmd_segs[@]} != '0' ]] || print_stderr 1 '%s\n' 'no command(s) provided'
-
 	temp_dir=${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}
 	[[ -d $temp_dir ]] || print_stderr 1 '%s\n' 'no suitable temp directory found'
 
