@@ -191,27 +191,29 @@ setup_fifo() {
 
 parse_commands() {
 	if [[ $command_string_mode ]]; then
-		max_command_index=$(( ${#command_segments[@]} - 1 ))
+		command_count=${#command_segments[@]}
 	else
 		# Define index and number of parameters of each command
 		cmd_num_to_pos=()
 		cmd_num_to_params=()
-		max_command_index=0
+		command_count=1
 		i=0
+		current_cmd_index=0
 		set +e
 		for param in "${command_segments[@]}"; do
 			if [[ $param == "$delim" ]]; then
-				(( max_command_index++ ))
+				(( command_count++ ))
+				(( current_cmd_index++ ))
 				(( i++ ))
 				continue
 			fi
 
-			if [[ ${cmd_num_to_pos[$max_command_index]} ]]; then
-				(( cmd_num_to_params[max_command_index]++ ))
+			if [[ ${cmd_num_to_pos[$current_cmd_index]} ]]; then
+				(( cmd_num_to_params[current_cmd_index]++ ))
 			else
 				# New command
-				cmd_num_to_pos[max_command_index]=$i
-				cmd_num_to_params[max_command_index]=1
+				cmd_num_to_pos[current_cmd_index]=$i
+				cmd_num_to_params[current_cmd_index]=1
 			fi
 			(( i++ ))
 		done
@@ -224,14 +226,14 @@ wait_for_activations() {
 	# Define command to run according to script activations within the rolling delay
 	# Skip reading for script activations if there's only one command and overun is prevented
 	activation_count=0
-	if (( max_command_index > 0 )) || [[ ! $prevent_overrun ]]; then
+	if (( command_count > 1 )) || [[ ! $prevent_overrun ]]; then
 		set +e
 		while read -t "$activation_timeout" -u 4; do
 			(( activation_count++ ))
-			[[ $prevent_overrun ]] && (( activation_count == max_command_index )) && break
+			[[ $prevent_overrun ]] && (( activation_count == command_count - 1 )) && break
 		done
 		set -e
-		(( activation_count <= max_command_index )) || exit 0
+		(( activation_count < command_count )) || exit 0
 	fi
 }
 
